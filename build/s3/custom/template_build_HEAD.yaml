@@ -1,0 +1,226 @@
+# Copyright (c) 2016-2020 Cristian Măgherușan-Stanciu
+
+
+  AWSTemplateFormatVersion: "2010-09-09"
+  Description: "EBS Optimizer: automates the conversion of EBS volumes into more cost-effective/performant/more reliable volume types"
+  Parameters:
+    ExecutionFrequency:
+      Default: "rate(5 minutes)"
+      Description: >
+        "Frequency of executing the Lambda function, influences the speed of
+        replacing your instances since they are currently replaced one at a
+        time. Can accept any value documented at
+        http://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html
+        Warning: Setting this to a higher execution frequency(lower value) may
+        suddenly replace all your AutoScaling group members, especially if you
+        don't have a grace period configured. Only change this if you really
+        know what you're doing!"
+      Type: "String"
+    FilterByTags:
+      Default: ""
+      Description: >
+        "(NOT IMPLEMENTED YET) Comma separated list of tags given in 'key=value' format, on which to
+        filter the volumes that EBS-Optimizer considers. By default (if no filters
+        are specified) the 'spot-enabled=true' key/value pair is used. Example:
+        'spot-enabled=true,environment=dev'"
+      Type: "String"
+    GP3MatchGP2IOPS:
+      Default: "true"
+      Description: >
+        "Controls whether to configure GP3 volumes with provisioned IOPS to match
+        GP2 performance characteristics for the same volume size (ignored for volumes smaller than 1TB).
+        See https://cloudwiry.com/ebs-gp3-vs-gp2-pricing-comparison/ for a more detailed explanation"
+      Type: "String"
+    LambdaFunctionTagKey:
+      Description: "Name of the tag to be applied to the Lambda function"
+      Default: "Name"
+      Type: "String"
+    LambdaFunctionTagValue:
+      Description: "Value of the tag to be applied to the Lambda function"
+      Default: "EBS-Optimizer"
+      Type: "String"
+    LambdaHandlerFunction:
+      Default: "ebs-optimizer"
+      AllowedValues:
+        - "ebs-optimizer"
+      Description: >
+        "Handler function for the Lambda function, don't change this unless you
+        know what you're doing!"
+      Type: "String"
+    LambdaMemorySize:
+      Default: 1024
+      Description: >
+        "Memory allocated to the Lambda function, setting this lower will slow
+        down the execution a bit"
+      Type: Number
+      MinValue: 128
+      MaxValue: 3008
+    LambdaS3Bucket:
+      Default: "ebs-optimizer"
+      Description: >
+        "S3 bucket that contains the
+        precompiled binaries, you can change this to your own if you want to
+        host your own binaries."
+      Type: "String"
+    LambdaS3BucketPrefix:
+      Default: "custom"
+      Description: >
+        "S3 bucket prefix to use as source of lambdas and template, you may need
+        to change this if you build and host your own binaries."
+      Type: "String"
+    LambdaZipName:
+      Default: "lambda_build_HEAD.zip"
+      Description: >
+        "Name of Lambda function zip file inside the S3 bucket. Can be used to
+        update to a more recent version, such as 'lambda_build_42.zip'.
+        Pre-compiled binaries easy to get started with can be taken from the
+        'ebs-optimizer' S3 bucket"
+      Type: "String"
+    LogRetentionPeriod:
+      Default: "7"
+      Description: >
+        "Number of days to keep the Lambda function logs in CloudWatch."
+      Type: "Number"
+    Regions:
+      Default: "ap-northeast-1,ap-northeast-2,ap-south-1,ap-southeast-1,ap-southeast-2,ca-central-1,eu-central-1,eu-north-1,eu-west-1,eu-west-2,eu-west-3,sa-east-1,us-east-1,us-east-2,us-west-1,us-west-2"
+      Description: >
+        "Comma-separated list of regions where EBS-Optimizer should run. It defaults to all
+        supported commercially available AWS regions as of Oct 2020. Because of
+        a Lambda limitation, the main Lambda function can currently
+        only be installed in "us-east-1" unless you host it yourself in an S3
+        bucket stored on another region, but it can process AutoScaling groups
+        from any other regions. Example: 'us-east-1,eu-west-1'"
+      Type: CommaDelimitedList
+    TagFilteringMode:
+      AllowedValues:
+        - "opt-in"
+        - "opt-out"
+      Default: "opt-in"
+      Description: >
+        "(NOT IMPLEMENTED YET) Controls the behavior against the tagged volumes. Defaults
+        to 'opt-in', only processing the groups tagged with 'spot-enabled=true'
+        or whatever else you may have configured using the 'FilterByTags'
+        option. The 'opt-out' mode yields opposite behavior, running against all
+        groups except for those tagged with 'spot-enabled=false' or other values
+        configured in the same 'FilterByTags' option"
+      Type: "String"
+  Resources:
+    LambdaExecutionRole:
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            -
+              Action: "sts:AssumeRole"
+              Effect: "Allow"
+              Principal:
+                Service:
+                  - "lambda.amazonaws.com"
+        Path: "/lambda/"
+      Type: "AWS::IAM::Role"
+
+    LambdaFunction:
+      Properties:
+        Code:
+          S3Bucket:
+            Ref: "LambdaS3Bucket"
+          S3Key:
+            Fn::Sub: "${LambdaS3BucketPrefix}/${LambdaZipName}"
+        Description: "Implements SPOT instance automation"
+        Environment:
+          Variables:
+            GP3_MATCH_GP2_IOPS:
+              Ref: "GP3MatchGP2IOPS"
+            GP3_MATCH_GP2_THROUGHPUT:
+              Ref: "GP3MatchGP2BurstThroughput"
+            REGIONS:
+              Fn::Join:
+              - ","
+              - Ref: "Regions"
+            TAG_FILTERING_MODE:
+              Ref: "TagFilteringMode"
+            TAG_FILTERS:
+              Ref: "FilterByTags"
+        Handler:
+          Ref: "LambdaHandlerFunction"
+        MemorySize:
+          Ref: "LambdaMemorySize"
+        Role:
+          Fn::GetAtt:
+            - "LambdaExecutionRole"
+            - "Arn"
+        Runtime: "go1.x"
+        Tags:
+          -
+            Key:
+              Ref: "LambdaFunctionTagKey"
+            Value:
+              Ref: "LambdaFunctionTagValue"
+        Timeout: 900
+      Type: "AWS::Lambda::Function"
+    LambdaPolicy:
+      Properties:
+        PolicyDocument:
+          Statement:
+            -
+              Action:
+                # EBS volume operations
+                - "ec2:ModifyVolume"
+                - "ec2:DescribeVolumes"
+                # We'll soon tag volumes to persist their previous configuration
+                - "ec2:CreateTags"
+                - "ec2:DeleteTags"
+                # needed to query available regions
+                - "ec2:DescribeRegions"
+                # needed for logging to CloudWatch Logs
+                - "logs:CreateLogGroup"
+                - "logs:CreateLogStream"
+                - "logs:PutLogEvents"
+              Effect: "Allow"
+              Resource: "*"
+        PolicyName: "LambdaPolicy"
+        Roles:
+          -
+            Ref: "LambdaExecutionRole"
+      Type: "AWS::IAM::Policy"
+
+    LogGroup:
+      UpdateReplacePolicy: Retain
+      DeletionPolicy: Retain
+      Properties:
+        LogGroupName:
+          Fn::Join:
+            - ""
+            -
+              - "/aws/lambda/"
+              -
+                Ref: "LambdaFunction"
+        RetentionInDays:
+          Ref: "LogRetentionPeriod"
+      Type: "AWS::Logs::LogGroup"
+
+    PermissionForEventsToInvokeLambda:
+      Properties:
+        Action: "lambda:InvokeFunction"
+        FunctionName:
+          Ref: "LambdaFunction"
+        Principal: "events.amazonaws.com"
+        SourceArn:
+          Fn::GetAtt:
+            - "ScheduledRule"
+            - "Arn"
+      Type: "AWS::Lambda::Permission"
+
+    ScheduledRule:
+      Properties:
+        Description: "ScheduledRule for launching the ebs-optimizer Lambda function"
+        ScheduleExpression:
+          Ref: "ExecutionFrequency"
+        State: "ENABLED"
+        Targets:
+          -
+            Arn:
+              Fn::GetAtt:
+                - "LambdaFunction"
+                - "Arn"
+            Id: "EBSOptimizerEventGenerator"
+      Type: "AWS::Events::Rule"
