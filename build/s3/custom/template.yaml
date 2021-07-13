@@ -21,14 +21,21 @@
       Description: >
         "(NOT IMPLEMENTED YET) Comma separated list of tags given in 'key=value' format, on which to
         filter the volumes that EBS-Optimizer considers. By default (if no filters
-        are specified) the 'spot-enabled=true' key/value pair is used. Example:
-        'spot-enabled=true,environment=dev'"
+        are specified) the 'optimize=true' key/value pair is used. Example:
+        'optimize=true,environment=dev'"
       Type: "String"
     GP3MatchGP2IOPS:
       Default: "true"
       Description: >
         "Controls whether to configure GP3 volumes with provisioned IOPS to match
-        GP2 performance characteristics for the same volume size (ignored for volumes smaller than 1TB).
+        GP2 burst performance characteristics for the same volume size (ignored for volumes smaller than 1TB).
+        See https://cloudwiry.com/ebs-gp3-vs-gp2-pricing-comparison/ for a more detailed explanation"
+      Type: "String"
+    GP3MatchGP2BurstThroughput:
+      Default: "true"
+      Description: >
+        "Controls whether to configure GP3 volumes with provisioned throughput to match
+        GP2 burst performance characteristics for the same volume size (ignored for volumes smaller than 170GB).
         See https://cloudwiry.com/ebs-gp3-vs-gp2-pricing-comparison/ for a more detailed explanation"
       Type: "String"
     LambdaFunctionTagKey:
@@ -98,10 +105,10 @@
       Default: "opt-in"
       Description: >
         "(NOT IMPLEMENTED YET) Controls the behavior against the tagged volumes. Defaults
-        to 'opt-in', only processing the groups tagged with 'spot-enabled=true'
+        to 'opt-in', only processing the groups tagged with 'optimize=true'
         or whatever else you may have configured using the 'FilterByTags'
         option. The 'opt-out' mode yields opposite behavior, running against all
-        groups except for those tagged with 'spot-enabled=false' or other values
+        groups except for those tagged with 'optimize=false' or other values
         configured in the same 'FilterByTags' option"
       Type: "String"
   Resources:
