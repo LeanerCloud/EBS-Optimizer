@@ -13,6 +13,9 @@ import (
 const (
 	// DefaultGP2ConversionThreshold is the size under which GP3 is more performant than GP2 for both throughput and IOPS
 	DefaultGP2ConversionThreshold = 170
+
+	InitialConfigurationTag  = "ebs_optimizer_initial_configuration"
+	PreviousConfigurationTag = "ebs_optimizer_previous_configuration"
 )
 
 type Config struct {
