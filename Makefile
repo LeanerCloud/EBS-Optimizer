@@ -3,7 +3,7 @@ DEPS := "wget git go docker golint zip"
 BINARY := ebs-optimizer
 
 COVER_PROFILE := /tmp/coverage.out
-BUCKET_NAME ?= cloudprowess
+BUCKET_NAME ?= ebs-optimizer
 FLAVOR ?= custom
 LOCAL_PATH := build/s3/$(FLAVOR)
 LICENSE_FILES := LICENSE THIRDPARTY
