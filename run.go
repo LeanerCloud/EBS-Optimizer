@@ -17,9 +17,15 @@ func (e *EBSOptimizer) Init(cfg *Config) {
 	e.config.setupLogging()
 	// use this only to list all the other regions
 
-	debug.Println("Cpnnecting to EC2 in the main region", e.config.MainRegion)
+	debug.Println("Connecting to EC2 in the main region", e.config.MainRegion)
 	e.mainEC2Conn = e.connectEC2(e.config.MainRegion)
 	eo = e
+
+	err := populateEBSPricing()
+
+	if err != nil {
+		log.Fatalf("failed to get EBS pricing information: %v", err)
+	}
 }
 
 func (e *EBSOptimizer) connectEC2(region string) *ec2.EC2 {

@@ -29,6 +29,7 @@ type EBSOptimizer struct {
 }
 
 func main() {
+
 	eventFile := conf.EventFile
 
 	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {

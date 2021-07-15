@@ -25,7 +25,7 @@ func (v *EBSVolume) process() error {
 
 	log.Printf("New volume configuration: %+v\n", nvc)
 
-	if vc == nvc {
+	if vc.VolumeType == nvc.VolumeType {
 		log.Println("Volume configuration unchanged, skipping volume", *v.VolumeId)
 		return nil
 	}
