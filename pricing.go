@@ -8,12 +8,13 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/pricing"
 	"github.com/aws/aws-sdk-go-v2/service/pricing/types"
-	"github.com/aws/aws-sdk-go/aws"
 )
 
+//Pricing is a data structure we use to unmarshal the data returned by the Pricing API into a native Golang object.
 type Pricing struct {
 	Product struct {
 		ProductFamily string `json:"productFamily"`
@@ -88,7 +89,7 @@ func getPricingData(filters []types.Filter) ([]Pricing, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get a page, %w", err)
 		}
-		fmt.Println("page contents: ", page.PriceList)
+		debug.Println("page contents: ", page.PriceList)
 
 		var p Pricing
 
@@ -104,7 +105,7 @@ func getPricingData(filters []types.Filter) ([]Pricing, error) {
 
 			err := json.Unmarshal(itemSKU, &p)
 			if err != nil {
-				fmt.Printf("error: ", err.Error())
+				fmt.Println("error: ", err.Error())
 			}
 			priceList = append(priceList, p)
 		}

@@ -5,34 +5,34 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/pricing/types"
-	"github.com/aws/aws-sdk-go/aws"
 )
 
 type volumeInfo struct {
 	name              string
-	minSizeGB         int64
-	maxSizeTB         int64
+	minSizeGB         int32
+	maxSizeTB         int32
 	minDurability     float64
-	maxIOPS           int64
-	maxIOPSPerGB      int64
-	maxThroughput     int64
+	maxIOPS           int32
+	maxIOPSPerGB      int32
+	maxThroughput     int32
 	Pricing           volumePricing
 	throughputPerMBs  float64
-	throughputFree    int64
-	minIOPS           int64
-	baselineIOPSPerGB int64
-	iopsBurst         int64
+	throughputFree    int32
+	minIOPS           int32
+	baselineIOPSPerGB int32
+	iopsBurst         int32
 	bootable          bool
 }
 
 type piopsPrice struct {
-	beginRange, endRange int64
+	beginRange, endRange int32
 	pricePerPIOPS        float64
 }
 
 type tputPrice struct {
-	beginRange, endRange int64
+	beginRange, endRange int32
 	tputPricePerMBps     float64
 }
 
@@ -129,30 +129,34 @@ var ebsInfo = map[string]volumeInfo{
 
 func populateEBSPricing() error {
 
+	log.Println("Fetching EBS pricing data...")
+
+	log.Println("Fetching EBS Storage pricing data for all volume types...")
 	err := populateStoragePricing()
 	if err != nil {
 		log.Fatalf("failed to get storage pricing information: %v", err)
 	}
 
+	log.Println("Fetching GP3 pIOPS pricing data...")
 	err = populateGP3PIOPSPricing()
 	if err != nil {
 		log.Fatalf("failed to get GP3 PIOPS pricing information: %v", err)
 	}
 
+	log.Println("Fetching GP3 Throughput pricing data...")
 	err = populateGP3PThroughputPricing()
-
 	if err != nil {
 		log.Fatalf("failed to get GP3 Throughput pricing information: %v", err)
 	}
 
+	log.Println("Fetching IO1 pIOPS pricing data...")
 	err = populateIO1IOPSPricing()
-
 	if err != nil {
 		log.Fatalf("failed to get IO1 PIOPS pricing information: %v", err)
 	}
 
+	log.Println("Fetching IO2 pIOPS pricing data...")
 	err = populateIO2IOPSPricing()
-
 	if err != nil {
 		log.Fatalf("failed to get IO2 PIOPS pricing information: %v", err)
 	}
@@ -187,7 +191,7 @@ func populateStoragePricing() error {
 		if err != nil {
 			fmt.Printf("failed to convert %s to float", pricePerGBStr)
 		}
-		fmt.Printf("%s: %s costs %f \n %#v\n\n", volumeType, region, pricePerGB, v)
+		debug.Printf("%s: %s costs %f \n %#v\n\n", volumeType, region, pricePerGB, v)
 		ebsInfo[volumeType].Pricing[region] = regionalPricing{
 			pricePerGB: pricePerGB,
 		}
@@ -223,7 +227,7 @@ func populateGP3PIOPSPricing() error {
 		if err != nil {
 			fmt.Printf("failed to convert %s to float", priceStr)
 		}
-		fmt.Printf("%s: %s PIOPS costs %f \n %#v\n\n", volumeType, region, price, v)
+		debug.Printf("%s: %s PIOPS costs %f \n %#v\n\n", volumeType, region, price, v)
 
 		pl := ebsInfo[volumeType].Pricing[region]
 
@@ -267,7 +271,7 @@ func populateGP3PThroughputPricing() error {
 		if err != nil {
 			fmt.Printf("failed to convert %s to float", priceStr)
 		}
-		fmt.Printf("%s: %s Throughput costs %f \n %#v\n\n", volumeType, region, price, v)
+		debug.Printf("%s: %s Throughput costs %f \n %#v\n\n", volumeType, region, price, v)
 
 		pl := ebsInfo[volumeType].Pricing[region]
 
@@ -310,7 +314,7 @@ func populateIO1IOPSPricing() error {
 		if err != nil {
 			fmt.Printf("failed to convert %s to float", priceStr)
 		}
-		fmt.Printf("%s: %s PIOPS costs %f \n %#v\n\n", volumeType, region, price, v)
+		debug.Printf("%s: %s PIOPS costs %f \n %#v\n\n", volumeType, region, price, v)
 
 		pl := ebsInfo[volumeType].Pricing[region]
 
@@ -345,7 +349,7 @@ func populateIO2IOPSPricing() error {
 	}
 
 	for _, v := range pd {
-		var beginRange, endRange int64
+		var beginRange, endRange int32
 		volumeType := v.Product.Attributes.VolumeAPIName
 		region := getRegion(v.Product.Attributes.Location)
 		priceStr := v.Terms.OnDemand.SKU.PriceDimensions.Dimension.PricePerUnit.USD
@@ -355,7 +359,8 @@ func populateIO2IOPSPricing() error {
 		if err != nil {
 			fmt.Printf("failed to convert %s to float", priceStr)
 		}
-		fmt.Printf("%s: %s PIOPS costs %f \n %#v\n\n", volumeType, region, price, v)
+		debug.Printf("Processing pricing info for %s in %s PIOPS costs %f \n\n", volumeType, region, price)
+		debug.Println(v)
 
 		pl := ebsInfo[volumeType].Pricing[region]
 
@@ -369,12 +374,15 @@ func populateIO2IOPSPricing() error {
 			endRange = 32000
 		}
 
+		p := piopsPrice{
+			beginRange:    beginRange,
+			endRange:      endRange,
+			pricePerPIOPS: price,
+		}
+		debug.Printf("Adding IO2 PIOPS configuration %#+v\n", p)
+
 		pl.piopsPrices = append(
-			pl.piopsPrices, piopsPrice{
-				beginRange:    beginRange,
-				endRange:      endRange,
-				pricePerPIOPS: price,
-			})
+			pl.piopsPrices, p)
 		ebsInfo[volumeType].Pricing[region] = pl
 
 	}

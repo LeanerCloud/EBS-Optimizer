@@ -1,13 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"sync"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
 // Init initializes some data structures reusable across multiple event runs
@@ -28,15 +28,16 @@ func (e *EBSOptimizer) Init(cfg *Config) {
 	}
 }
 
-func (e *EBSOptimizer) connectEC2(region string) *ec2.EC2 {
+func (e *EBSOptimizer) connectEC2(region string) *ec2.Client {
 
-	sess, err := session.NewSession()
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(region),
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	return ec2.New(sess,
-		aws.NewConfig().WithRegion(region))
+	return ec2.NewFromConfig(cfg)
 }
 
 func (e *EBSOptimizer) run(event *json.RawMessage) {
@@ -62,9 +63,9 @@ func (e *EBSOptimizer) run(event *json.RawMessage) {
 func (e *EBSOptimizer) getRegions() ([]string, error) {
 	var output []string
 
-	log.Println("Scanning for available AWS regions")
+	debug.Println("Scanning for available AWS regions")
 
-	resp, err := e.mainEC2Conn.DescribeRegions(&ec2.DescribeRegionsInput{})
+	resp, err := e.mainEC2Conn.DescribeRegions(context.TODO(), &ec2.DescribeRegionsInput{})
 
 	if err != nil {
 		log.Println(err.Error())
@@ -75,7 +76,7 @@ func (e *EBSOptimizer) getRegions() ([]string, error) {
 
 	for _, r := range resp.Regions {
 
-		if r != nil && r.RegionName != nil {
+		if r.RegionName != nil {
 			debug.Println("Found region", *r.RegionName)
 			output = append(output, *r.RegionName)
 		}
@@ -88,25 +89,42 @@ func (e *EBSOptimizer) getRegions() ([]string, error) {
 // by default this is all asg with the tag 'spot-enabled=true'.
 func (e *EBSOptimizer) processRegions(regions []string) {
 	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	var savings float64
 
-	for _, r := range regions {
+	for _, reg := range regions {
 
 		wg.Add(1)
 
-		r := region{name: r, conf: e.config}
+		r := region{name: reg, conf: e.config}
 
 		go func() {
 
+			debug.Println("Creating connections to the required AWS services in", r.name)
+			r.api.connect(r.name, r.conf.MainRegion)
+			r.scanEBSVolumes()
+
 			if r.enabled() {
 				log.Printf("Enabled to run in %s, processing region.\n", r.name)
-				r.processRegion()
+				r.processEBSVolumes()
 			} else {
 				debug.Println("Not enabled to run in", r.name)
 				debug.Println("List of enabled regions:", r.conf.Regions)
 			}
 
+			r.calculateHourlySavings()
+			if r.savings > 0 {
+				log.Printf("Calculated savings in %s: $%f(monthly), %f(hourly) ", r.name, r.savings*730, r.savings)
+			}
+
+			mutex.Lock()
+			savings += r.savings
+			mutex.Unlock()
+
 			wg.Done()
 		}()
 	}
 	wg.Wait()
+
+	log.Printf("Total savings: %f(monthly), %f(hourly)", savings*730, savings)
 }

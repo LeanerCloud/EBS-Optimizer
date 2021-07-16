@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
 var conf Config
@@ -23,9 +23,10 @@ var eo *EBSOptimizer
 
 var debug *log.Logger
 
+// EBSOptimizer provides the global configuration
 type EBSOptimizer struct {
 	config      *Config
-	mainEC2Conn ec2iface.EC2API
+	mainEC2Conn *ec2.Client
 }
 
 func main() {

@@ -1,38 +1,39 @@
 package main
 
 import (
+	"context"
 	"log"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
 type ec2Conn struct {
-	session *session.Session
-	ec2     ec2iface.EC2API
-	region  string
-}
-
-func (c *ec2Conn) setSession(region string) {
-	c.session = session.Must(
-		session.NewSession(&aws.Config{Region: aws.String(region)}))
+	config *aws.Config
+	ec2    *ec2.Client
+	region string
 }
 
 func (c *ec2Conn) connect(region, mainRegion string) {
 
-	log.Println("Creating service connections in", region)
+	debug.Println("Creating service connections in", region)
 
-	if c.session == nil {
-		c.setSession(region)
+	if c.config == nil {
+		cfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(region),
+		)
+		if err != nil {
+			log.Fatalf("Could not create EC2 service connections")
+		}
+		c.config = &cfg
 	}
 
-	ec2Conn := make(chan *ec2.EC2)
+	ec2Conn := make(chan *ec2.Client)
 
-	go func() { ec2Conn <- ec2.New(c.session) }()
+	go func() { ec2Conn <- ec2.NewFromConfig(*c.config) }()
 
 	c.ec2, c.region = <-ec2Conn, region
 
-	log.Println("Created service connections in", region)
+	debug.Println("Created service connections in", region)
 }

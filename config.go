@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/namsral/flag"
 )
 
@@ -14,10 +13,13 @@ const (
 	// DefaultGP2ConversionThreshold is the size under which GP3 is more performant than GP2 for both throughput and IOPS
 	DefaultGP2ConversionThreshold = 170
 
-	InitialConfigurationTag  = "ebs_optimizer_initial_configuration"
+	// InitialConfigurationTag is the name of the tag applied to the EBS volume that holds a backup of the initial configuration of the volume, in JSON format.
+	InitialConfigurationTag = "ebs_optimizer_initial_configuration"
+	// PreviousConfigurationTag is the name of the tag applied to the EBS volume that holds a backup of the previous configuration of the volume, in JSON format.
 	PreviousConfigurationTag = "ebs_optimizer_previous_configuration"
 )
 
+// Config stores the global configuration
 type Config struct {
 
 	// Logging
@@ -71,7 +73,7 @@ func (c *Config) ParseCommandlineFlags() {
 	if r := os.Getenv("AWS_REGION"); r != "" {
 		region = r
 	} else {
-		region = endpoints.UsEast1RegionID
+		region = "us-east-1"
 	}
 
 	c.MainRegion = region

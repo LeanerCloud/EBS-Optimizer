@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"path/filepath"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
 type region struct {
@@ -16,6 +17,7 @@ type region struct {
 	api ec2Conn
 
 	ebsVolumes []*EBSVolume
+	savings    float64
 }
 
 // var regionMap = map[string]string{
@@ -91,21 +93,8 @@ func (r *region) enabled() bool {
 	return false
 }
 
-func (r *region) processRegion() {
-
-	log.Println("Creating connections to the required AWS services in", r.name)
-	r.api.connect(r.name, r.conf.MainRegion)
-
-	if !r.hasEBSPricingInfo() {
-		r.getEBSPricingInfo()
-	}
-
-	r.scanEBSVolumes()
-	r.processEBSVolumes()
-}
-
 func (r *region) scanEBSVolumes() error {
-	resp, err := r.api.ec2.DescribeVolumes(&ec2.DescribeVolumesInput{})
+	resp, err := r.api.ec2.DescribeVolumes(context.TODO(), &ec2.DescribeVolumesInput{})
 
 	if err != nil {
 		log.Println("Could not scan volumes", err.Error())
@@ -125,17 +114,14 @@ func (r *region) processEBSVolumes() error {
 			log.Println("Could not convert volume", v, err.Error())
 			return err
 		}
-
 	}
 	return nil
 }
 
-//todo implement hasEBSPricingInfo
-func (r *region) hasEBSPricingInfo() bool {
-	return false
-}
-
-//todo implement getEBSPricingInfo
-func (r *region) getEBSPricingInfo() error {
-	return nil
+func (r *region) calculateHourlySavings() {
+	var savings float64
+	for _, v := range r.ebsVolumes {
+		savings += v.calculateHourlySavings()
+	}
+	r.savings = savings
 }

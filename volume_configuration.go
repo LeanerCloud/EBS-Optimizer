@@ -4,18 +4,46 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/aws/aws-sdk-go/aws/endpoints"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
 type volumeConfig struct {
-	VolumeType   string
-	IOPS         int64
-	Throughput   int64
-	monthlyPrice float64
+	VolumeType types.VolumeType
+	IOPS       int32
+	Throughput int32
+	Region     string
+	Size       int32
 }
 
-func (vc *volumeConfig) calculatePrice() float64 {
-	return 0
+func (vc *volumeConfig) calculateMonthlyPrice() float64 {
+	vi := ebsInfo[string(vc.VolumeType)]
+	rp := vi.Pricing[vc.Region]
+
+	debug.Printf("Calculating monthly cost for %v in %s \n", vc, vc.Region)
+
+	// Start with Storage pricing
+
+	monthlyPrice := rp.pricePerGB * float64(vc.Size)
+
+	// Add provisioned IOPS pricing
+	for _, iopsMonthlyPrice := range rp.piopsPrices {
+		if vc.IOPS >= iopsMonthlyPrice.endRange {
+			monthlyPrice += iopsMonthlyPrice.pricePerPIOPS * float64(iopsMonthlyPrice.endRange-iopsMonthlyPrice.beginRange)
+		} else if vc.IOPS >= iopsMonthlyPrice.beginRange {
+			monthlyPrice += iopsMonthlyPrice.pricePerPIOPS * float64(vc.IOPS-iopsMonthlyPrice.beginRange)
+		}
+	}
+
+	// Add provisioned Throughput pricing
+	for _, tputMonthlyPrice := range rp.tputPrices {
+		if vc.Throughput >= tputMonthlyPrice.endRange {
+			monthlyPrice += tputMonthlyPrice.tputPricePerMBps * float64(tputMonthlyPrice.endRange-tputMonthlyPrice.beginRange)
+		} else if vc.Throughput > tputMonthlyPrice.beginRange {
+			monthlyPrice += tputMonthlyPrice.tputPricePerMBps * float64(vc.Throughput-tputMonthlyPrice.beginRange)
+		}
+	}
+	log.Printf("Cost for %#+v in %s: %f \n", vc, vc.Region, monthlyPrice)
+	return monthlyPrice
 }
 
 func (vc *volumeConfig) toString() string {
@@ -31,22 +59,22 @@ func (vc *volumeConfig) toString() string {
 func io2Supports(region string) bool {
 	// this is fugly, I wish we had a better way of checking this.
 	io2SupporedRegions := []string{
-		endpoints.UsEast1RegionID,
-		endpoints.UsEast2RegionID,
-		endpoints.UsWest1RegionID,
-		endpoints.UsWest2RegionID,
-		endpoints.CaCentral1RegionID,
-		endpoints.EuCentral1RegionID,
-		endpoints.EuWest1RegionID,
-		endpoints.EuWest2RegionID,
-		endpoints.EuNorth1RegionID,
-		endpoints.ApEast1RegionID,
-		endpoints.ApSouth1RegionID,
-		endpoints.ApSoutheast1RegionID,
-		endpoints.ApSoutheast2RegionID,
-		endpoints.ApNortheast1RegionID,
-		endpoints.ApNortheast2RegionID,
-		endpoints.MeSouth1RegionID,
+		"us-east-1",
+		"us-east-2",
+		"us-west-1",
+		"us-west-2",
+		"ca-central-1",
+		"eu-central-1",
+		"eu-west-1",
+		"eu-west-2",
+		"eu-north-1",
+		"ap-east-1",
+		"ap-south-1",
+		"ap-southeast-1",
+		"ap-southeast-2",
+		"ap-northeast-1",
+		"ap-northeast-2",
+		"me-south-1",
 	}
 	for _, item := range io2SupporedRegions {
 		if item == region {
