@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.7.1
 	github.com/aws/aws-sdk-go-v2/config v1.5.0
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.12.0
+	github.com/aws/aws-sdk-go-v2/service/marketplacemetering v1.4.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/pricing v1.5.1
 	github.com/mattn/goveralls v0.0.9
 	github.com/namsral/flag v1.7.4-pre

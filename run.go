@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -104,14 +105,6 @@ func (e *EBSOptimizer) processRegions(regions []string) {
 			r.api.connect(r.name, r.conf.MainRegion)
 			r.scanEBSVolumes()
 
-			if r.enabled() {
-				log.Printf("Enabled to run in %s, processing region.\n", r.name)
-				r.processEBSVolumes()
-			} else {
-				debug.Println("Not enabled to run in", r.name)
-				debug.Println("List of enabled regions:", r.conf.Regions)
-			}
-
 			r.calculateHourlySavings()
 			if r.savings > 0 {
 				log.Printf("Calculated savings in %s: $%f(monthly), %f(hourly) ", r.name, r.savings*730, r.savings)
@@ -127,4 +120,36 @@ func (e *EBSOptimizer) processRegions(regions []string) {
 	wg.Wait()
 
 	log.Printf("Total savings: %f(monthly), %f(hourly)", savings*730, savings)
+
+	if strings.HasPrefix(e.config.Version, "stable") {
+		if err := meterMarketplaceUsage(savings); err != nil {
+			log.Println("Failed marketplace metering, exiting...")
+			return
+		}
+	}
+
+	for _, reg := range regions {
+
+		wg.Add(1)
+		r := region{name: reg, conf: e.config}
+
+		go func() {
+
+			debug.Println("Creating connections to the required AWS services in", r.name)
+			r.api.connect(r.name, r.conf.MainRegion)
+			r.scanEBSVolumes()
+
+			if r.enabled() {
+				log.Printf("Enabled to run in %s, processing region.\n", r.name)
+				r.processEBSVolumes()
+			} else {
+				debug.Println("Not enabled to run in", r.name)
+				debug.Println("List of enabled regions:", r.conf.Regions)
+			}
+
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+
 }
