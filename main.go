@@ -33,7 +33,7 @@ func main() {
 
 	eventFile := conf.EventFile
 
-	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+	if runningFromLambda() {
 		lambda.Start(Handler)
 	} else if eventFile != "" {
 		parseEvent, err := ioutil.ReadFile(eventFile)
@@ -77,4 +77,12 @@ func init() {
 // Handler implements the AWS Lambda handler interface
 func Handler(ctx context.Context, rawEvent json.RawMessage) {
 	eventHandler(&rawEvent)
+}
+
+func runningFromLambda() bool {
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		log.Println("Running from Lambda")
+		return true
+	}
+	return false
 }

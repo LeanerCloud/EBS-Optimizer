@@ -121,11 +121,14 @@ func (e *EBSOptimizer) processRegions(regions []string) {
 
 	log.Printf("Total savings: %f(monthly), %f(hourly)", savings*730, savings)
 
-	if strings.HasPrefix(e.config.Version, "stable") {
+	if strings.Contains(e.config.Version, "stable") {
+		log.Println("Running a stable build, submitting AWS marketplace metering data")
 		if err := meterMarketplaceUsage(savings); err != nil {
-			log.Println("Failed marketplace metering, exiting...")
+			log.Println("Failed marketplace metering, exiting... Encountered error:", err.Error())
 			return
 		}
+	} else {
+		log.Println("Not running a stable build, skipped AWS marketplace metering")
 	}
 
 	for _, reg := range regions {

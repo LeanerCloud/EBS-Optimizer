@@ -4,8 +4,7 @@ COPY . /src
 WORKDIR /src
 RUN FLAVOR=stable CGO_ENABLED=0 GOPROXY=direct make
 
-FROM scratch
-# COPY LICENSE BINARY_LICENSE THIRDPARTY /
+FROM alpine
 COPY --from=golang /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=golang /src/ebs-optimizer .
 ENTRYPOINT ["./ebs-optimizer"]
